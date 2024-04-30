@@ -12,8 +12,8 @@ import logging
 logging.getLogger("pymee").setLevel(logging.DEBUG)
 
 homee_ip = "<IP>"
-homee_username = '<USERNAME>'
-homee_password = '<PASSWORD>'
+homee_username = "<USERNAME>"
+homee_password = "<PASSWORD>"
 
 class InterceptHandler(logging.Handler):
     def emit(self, record):
@@ -65,7 +65,7 @@ class MyHomee(Homee):
         loguru.logger.error("An error occurred: %s", error)
 
     def wait_until_queue_empty(self):
-        """Returns a coroutine that runs until the connection has been closed."""
+        """Returns a coroutine that runs until queue is empty."""
         return self._queue_empty_event.wait()
 
     async def activate_homeegram(self, homeegram_id:int):
