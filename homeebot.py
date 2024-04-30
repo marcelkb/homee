@@ -94,7 +94,7 @@ def is_holiday():
         today = datetime.now().strftime('%Y-%m-%d')
 
         for holiday in holidays:
-            if holiday['date'] == today and "DE-NW" in holiday["counties"]:
+            if holiday is not None and holiday['date'] == today and ("counties" in holiday and (holiday["counties"] is None or "DE-NW" in holiday["counties"])):
                 return True
         return False
     except Exception as e:
