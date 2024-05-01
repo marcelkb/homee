@@ -136,7 +136,7 @@ async def main():
         loguru.logger.info("holiday, activate Urlaubsschaltung")
         await homee.activate_homeegram(morgenschaltungUrlaub["id"])
         await homee.deactivate_homeegram(morgenschaltung["id"])
-    elif not morgenschaltung['active']:
+    elif not morgenschaltung['active'] or morgenschaltungUrlaub['active']:
         loguru.logger.info("Morgenschaltung is not active and no holiday, reactivate")
         await homee.activate_homeegram(morgenschaltung["id"])
         await homee.deactivate_homeegram(morgenschaltungUrlaub["id"])
@@ -149,13 +149,20 @@ async def main():
     await homee.wait_until_disconnected()
 
 
+def run_main():
+    asyncio.run(main())
+
 # Schedule the execution of main() every day at 00:05
-schedule.every().day.at("00:05").do(lambda: asyncio.run(main()))
-asyncio.run(main()) # run einmal beim start direkt
+schedule.every().day.at("00:05").do(run_main)
+
+loop = asyncio.get_event_loop()
+# Run the main coroutine in the event loop
+loop.run_until_complete(main()) # run einmal beim start direkt
+
 
 # # Run the scheduler continuously
 while True:
     schedule.run_pending()
     loguru.logger.debug("sleep 60s")
-    time.sleep(60)  # Check every minute
+    asyncio.get_event_loop().run_until_complete(asyncio.sleep(60))
 
