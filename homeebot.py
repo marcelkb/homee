@@ -1,19 +1,18 @@
-import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import requests
-import schedule
 import loguru
 from pymee import Homee
 import asyncio
 import logging
 
 # Set debug level so we get verbose logs
-logging.getLogger("pymee").setLevel(logging.DEBUG)
+#logging.getLogger("pymee").setLevel(logging.DEBUG)
 
 homee_ip = "<IP>"
 homee_username = "<USERNAME>"
 homee_password = "<PASSWORD>"
+
 
 class InterceptHandler(logging.Handler):
     def emit(self, record):
@@ -65,7 +64,7 @@ class MyHomee(Homee):
         loguru.logger.error("An error occurred: %s", error)
 
     def wait_until_queue_empty(self):
-        """Returns a coroutine that runs until queue is empty."""
+        """Returns a coroutine that runs until the queue is empty."""
         return self._queue_empty_event.wait()
 
     async def activate_homeegram(self, homeegram_id:int):
@@ -88,10 +87,10 @@ def get_holidays(country_code='DE'):
         loguru.logger.error(e)
         return None
 
-def is_holiday():
+def is_public_holiday(date = datetime.now()):
     try:
         holidays = get_holidays()
-        today = datetime.now().strftime('%Y-%m-%d')
+        today = date.strftime('%Y-%m-%d')
 
         for holiday in holidays:
             if holiday is not None and holiday['date'] == today and ("counties" in holiday and (holiday["counties"] is None or "DE-NW" in holiday["counties"])):
@@ -102,7 +101,44 @@ def is_holiday():
         return False # Fallback kein Feiertag
 
 
+def is_bridge_day():
+    today = datetime.now()
+    next_day = today + timedelta(days=1)
+    last_day = today - timedelta(days=1)
+
+    if today.weekday() == 0: # Monday
+        return is_public_holiday(next_day)
+    elif today.weekday() == 3: # Thursday
+        return is_public_holiday(last_day)
+    else:
+        return False
+
+
+def heartBeat():
+    logging.info("send heartBeat")
+    try:
+        result = requests.get(heartbeat_url)
+        if not result.status_code == 200 and result.text == "ok":
+            logging.error("error sending heartbeat " + str(result))
+    except Exception:
+        logging.error("could not send heartbeat")
+
+
+
 async def main():
+    lastRun = None
+    while True:
+        timeNow = datetime.now()
+        if (lastRun is None or ((timeNow - lastRun).total_seconds() > 60 * 60)
+                and 0 <= timeNow.hour < 1 and 5 <= timeNow.minute >= 10):  # alle 24h zwischen 00:05 und 00:10
+            await run()
+            lastRun = timeNow
+
+        loguru.logger.debug("sleep 60s")
+        await asyncio.sleep(60)
+
+
+async def run():
     loguru.logger.info("Running HomeeBot...")
     # Create an instance of Homee
     homee = MyHomee(homee_ip, homee_username, homee_password)
@@ -117,22 +153,26 @@ async def main():
 
     loguru.logger.info(f"homeegramms: {len(homee.homeegrams)}")
 
-    isHoliday = is_holiday()
+    isHoliday = is_public_holiday()
+    isBridgeDay = is_bridge_day()
     if isHoliday:
         loguru.logger.info("Today is a holiday")
+    elif isBridgeDay:
+        loguru.logger.info("Today is a bridge day")
     else:
-        loguru.logger.info("No Holiday")
+        loguru.logger.info("No holiday")
+        loguru.logger.info("No bridge day")
 
     morgenschaltung = None
     morgenschaltungUrlaub = None
     for homeegram in homee.homeegrams:
-        if homeegram["name"] == "Morgenschaltung%20" or homeegram["name"] == "Morgenschaltung":
+        if homeegram["name"] == "Morgenschaltung%20(1)" or homeegram["name"] == "Morgenschaltung (1)":
              loguru.logger.debug(f"{homeegram['id']}: {homeegram['name']} -> {homeegram['active']}")
              morgenschaltung = homeegram
-        if homeegram["name"] == "Morgenschaltung%20Urlaub" or homeegram["name"] == "Morgenschaltung Urlaub":
+        if homeegram["name"] == "Morgenschaltung%20Urlaub (1)" or homeegram["name"] == "Morgenschaltung Urlaub (1)":
              loguru.logger.debug(f"{homeegram['id']}: {homeegram['name']} -> {homeegram['active']}")
              morgenschaltungUrlaub = homeegram
-    if isHoliday:
+    if isHoliday or isBridgeDay:
         loguru.logger.info("holiday, activate Urlaubsschaltung")
         await homee.activate_homeegram(morgenschaltungUrlaub["id"])
         await homee.deactivate_homeegram(morgenschaltung["id"])
@@ -149,20 +189,5 @@ async def main():
     await homee.wait_until_disconnected()
 
 
-def run_main():
+if __name__ == "__main__":
     asyncio.run(main())
-
-# Schedule the execution of main() every day at 00:05
-schedule.every().day.at("00:05").do(run_main)
-
-loop = asyncio.get_event_loop()
-# Run the main coroutine in the event loop
-loop.run_until_complete(main()) # run einmal beim start direkt
-
-
-# # Run the scheduler continuously
-while True:
-    schedule.run_pending()
-    loguru.logger.debug("sleep 60s")
-    asyncio.get_event_loop().run_until_complete(asyncio.sleep(60))
-
