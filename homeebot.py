@@ -108,7 +108,7 @@ def is_bridge_day():
 
     if today.weekday() == 0: # Monday
         return is_public_holiday(next_day)
-    elif today.weekday() == 3: # Thursday
+    elif today.weekday() == 4: # Friday
         return is_public_holiday(last_day)
     else:
         return False
@@ -139,54 +139,60 @@ async def main():
 
 
 async def run():
-    loguru.logger.info("Running HomeeBot...")
-    # Create an instance of Homee
-    homee = MyHomee(homee_ip, homee_username, homee_password)
+    try:
+        loguru.logger.info("Running HomeeBot...")
+        # Create an instance of Homee
+        homee = MyHomee(homee_ip, homee_username, homee_password)
 
-    # Connect and start listening on a new task
-    homeeTask = homee.start()
+        # Connect and start listening on a new task
+        homeeTask = homee.start()
 
-    # Wait until the connection is live and all data has been received
-    await homee.wait_until_connected()
+        # Wait until the connection is live and all data has been received
+        await homee.wait_until_connected()
 
-    # Do something here...
+        # Do something here...
 
-    loguru.logger.info(f"homeegramms: {len(homee.homeegrams)}")
+        loguru.logger.info(f"homeegramms: {len(homee.homeegrams)}")
 
-    isHoliday = is_public_holiday()
-    isBridgeDay = is_bridge_day()
-    if isHoliday:
-        loguru.logger.info("Today is a holiday")
-    elif isBridgeDay:
-        loguru.logger.info("Today is a bridge day")
-    else:
-        loguru.logger.info("No holiday")
-        loguru.logger.info("No bridge day")
+        isHoliday = is_public_holiday()
+        isBridgeDay = is_bridge_day()
+        if isHoliday:
+            loguru.logger.info("Today is a holiday")
+        elif isBridgeDay:
+            loguru.logger.info("Today is a bridge day")
+        else:
+            loguru.logger.info("No holiday")
+            loguru.logger.info("No bridge day")
 
-    morgenschaltung = None
-    morgenschaltungUrlaub = None
-    for homeegram in homee.homeegrams:
-        if homeegram["name"] == "Morgenschaltung%20(1)" or homeegram["name"] == "Morgenschaltung (1)":
-             loguru.logger.debug(f"{homeegram['id']}: {homeegram['name']} -> {homeegram['active']}")
-             morgenschaltung = homeegram
-        if homeegram["name"] == "Morgenschaltung%20Urlaub (1)" or homeegram["name"] == "Morgenschaltung Urlaub (1)":
-             loguru.logger.debug(f"{homeegram['id']}: {homeegram['name']} -> {homeegram['active']}")
-             morgenschaltungUrlaub = homeegram
-    if isHoliday or isBridgeDay:
-        loguru.logger.info("holiday, activate Urlaubsschaltung")
-        await homee.activate_homeegram(morgenschaltungUrlaub["id"])
-        await homee.deactivate_homeegram(morgenschaltung["id"])
-    elif not morgenschaltung['active'] or morgenschaltungUrlaub['active']:
-        loguru.logger.info("Morgenschaltung is not active and no holiday, reactivate")
-        await homee.activate_homeegram(morgenschaltung["id"])
-        await homee.deactivate_homeegram(morgenschaltungUrlaub["id"])
+        morgenschaltung = None
+        morgenschaltungUrlaub = None
+        for homeegram in homee.homeegrams:
+            if homeegram["name"] == "Morgenschaltung%20(1)" or homeegram["name"] == "Morgenschaltung (1)":
+                 loguru.logger.debug(f"{homeegram['id']}: {homeegram['name']} -> {homeegram['active']}")
+                 morgenschaltung = homeegram
+            if homeegram["name"] == "Morgenschaltung%20Urlaub (1)" or homeegram["name"] == "Morgenschaltung Urlaub (1)":
+                 loguru.logger.debug(f"{homeegram['id']}: {homeegram['name']} -> {homeegram['active']}")
+                 morgenschaltungUrlaub = homeegram
+        if isHoliday or isBridgeDay:
+            loguru.logger.info("holiday, activate Urlaubsschaltung")
+            await homee.activate_homeegram(morgenschaltungUrlaub["id"])
+            await homee.deactivate_homeegram(morgenschaltung["id"])
+        elif not morgenschaltung['active'] or morgenschaltungUrlaub['active']:
+            loguru.logger.info("Morgenschaltung is not active and no holiday, reactivate")
+            await homee.activate_homeegram(morgenschaltung["id"])
+            await homee.deactivate_homeegram(morgenschaltungUrlaub["id"])
 
 
-    # Close the connection and wait until we are disconnected
-    await homee.wait_until_queue_empty()
+        # Close the connection and wait until we are disconnected
+        await homee.wait_until_queue_empty()
 
-    homee.disconnect()
-    await homee.wait_until_disconnected()
+        homee.disconnect()
+        await homee.wait_until_disconnected()
+    except Exception as e:
+        loguru.logger.error(f"error: {e}, try again in 60 seconds")
+        await asyncio.sleep(60)
+        await run()
+
 
 
 if __name__ == "__main__":
